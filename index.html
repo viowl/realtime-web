@@ -15,71 +15,101 @@
     <script>
       (async () => {
         const SESSION_URL =
-          "https://n8n-test.space/webhook/728f5083-a6e5-4f7f-b671-c7dacb68f292"; // your n8n endpoint
+          "https://n8n-test.space/webhook/728f5083-a6e5-4f7f-b671-c7dacb68f292"; // ваш n8n
 
         async function startRealtime() {
-          // 1) Get ephemeral key from n8n
-          const r0 = await fetch(SESSION_URL, { method: "GET" });
-          if (!r0.ok) {
-            alert("Could not get session key");
-            return;
-          }
-          const data = await r0.json();
-          const EPHEMERAL_KEY = data?.client_secret?.value;
-          if (!EPHEMERAL_KEY) {
-            alert("Session key is empty");
-            return;
-          }
-
-          // 2) Prepare WebRTC
-          const pc = new RTCPeerConnection();
-          const audioEl = document.createElement("audio");
-          audioEl.autoplay = true; // must be triggered by a user gesture
-          document.body.appendChild(audioEl);
-
-          pc.ontrack = (e) => {
-            audioEl.srcObject = e.streams[0];
-          };
-
-          // Microphone
-          let mic;
           try {
-            mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-          } catch (e) {
-            alert("Please allow microphone access");
-            return;
-          }
-          mic.getTracks().forEach((t) => pc.addTrack(t, mic));
+            console.clear();
+            console.log("🔎 1) Fetching session from:", SESSION_URL);
 
-          // 3) SDP offer -> OpenAI Realtime, get answer
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
+            // 1) Забираем эфемерный ключ у n8n
+            const r0 = await fetch(SESSION_URL, { method: "GET" });
+            console.log("   r0.status =", r0.status);
 
-          const r1 = await fetch(
-            "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${EPHEMERAL_KEY}`,
-                "Content-Type": "application/sdp",
-              },
-              body: offer.sdp,
+            const raw = await r0.text();
+            console.log("   r0.raw =", raw);
+
+            let data;
+            try {
+              data = JSON.parse(raw);
+            } catch (e) {
+              console.error("❗ JSON parse error:", e);
+              alert("Backend returned non-JSON");
+              return;
             }
-          );
 
-          if (!r1.ok) {
-            const msg = await r1.text().catch(() => "");
-            alert("Realtime connection error:\n" + msg);
-            return;
+            // ожидаем { "client_secret": { "value": "ek_...", "expires_at": ... } }
+            const EPHEMERAL_KEY = data?.client_secret?.value;
+            console.log(
+              "   EPHEMERAL_KEY =",
+              EPHEMERAL_KEY ? EPHEMERAL_KEY.slice(0, 10) + "…" : EPHEMERAL_KEY
+            );
+            if (!EPHEMERAL_KEY) {
+              alert("Session key is empty");
+              return;
+            }
+
+            // 2) WebRTC
+            console.log("🎛 2) Preparing WebRTC");
+            const pc = new RTCPeerConnection();
+            const audioEl = document.createElement("audio");
+            audioEl.autoplay = true;
+            document.body.appendChild(audioEl);
+            pc.ontrack = (e) => (audioEl.srcObject = e.streams[0]);
+
+            let mic;
+            try {
+              mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+              console.log("🎤 mic granted");
+            } catch (e) {
+              console.error("🎤 mic error:", e);
+              alert("Please allow microphone access");
+              return;
+            }
+            mic.getTracks().forEach((t) => pc.addTrack(t, mic));
+
+            // 3) Отправляем SDP в OpenAI
+            console.log("🚀 3) Sending SDP offer to OpenAI…");
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            let r1;
+            try {
+              r1 = await fetch(
+                "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview",
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${EPHEMERAL_KEY}`,
+                    "Content-Type": "application/sdp",
+                  },
+                  body: offer.sdp,
+                }
+              );
+            } catch (e) {
+              console.error("❗ OpenAI fetch threw before network:", e);
+              alert("OpenAI fetch failed before request");
+              return;
+            }
+
+            console.log("   r1.status =", r1.status);
+            if (!r1.ok) {
+              const msg = await r1.text().catch(() => "");
+              console.error("   r1.body =", msg);
+              alert("Realtime connection error:\n" + msg);
+              return;
+            }
+
+            const answer = { type: "answer", sdp: await r1.text() };
+            await pc.setRemoteDescription(answer);
+
+            console.log("✅ 4) Realtime connected. You can speak now.");
+          } catch (e) {
+            console.error("💥 Uncaught in startRealtime:", e);
+            alert("Unexpected error: " + e);
           }
-
-          const answer = { type: "answer", sdp: await r1.text() };
-          await pc.setRemoteDescription(answer);
-
-          console.log("✅ Realtime connected. You can speak now.");
         }
 
-        // Click to start (required for autoplay policies)
         document
           .getElementById("start-realtime")
           .addEventListener("click", startRealtime);
