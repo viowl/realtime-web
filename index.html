@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Voice Assistant</title>
+  </head>
+  <body>
+    <h1>Voice Assistant</h1>
+
+    <button id="start-realtime" style="padding: 12px 16px; font-size: 16px">
+      🎤 Talk to the assistant
+    </button>
+
+    <script>
+      (async () => {
+        const SESSION_URL = "https://n8n-test.space/webhook/realtime/session"; // your n8n endpoint
+
+        async function startRealtime() {
+          // 1) Get ephemeral key from n8n
+          const r0 = await fetch(SESSION_URL, { method: "GET" });
+          if (!r0.ok) {
+            alert("Could not get session key");
+            return;
+          }
+          const data = await r0.json();
+          const EPHEMERAL_KEY = data?.client_secret?.value;
+          if (!EPHEMERAL_KEY) {
+            alert("Session key is empty");
+            return;
+          }
+
+          // 2) Prepare WebRTC
+          const pc = new RTCPeerConnection();
+          const audioEl = document.createElement("audio");
+          audioEl.autoplay = true; // must be triggered by a user gesture
+          document.body.appendChild(audioEl);
+
+          pc.ontrack = (e) => {
+            audioEl.srcObject = e.streams[0];
+          };
+
+          // Microphone
+          let mic;
+          try {
+            mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (e) {
+            alert("Please allow microphone access");
+            return;
+          }
+          mic.getTracks().forEach((t) => pc.addTrack(t, mic));
+
+          // 3) SDP offer -> OpenAI Realtime, get answer
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
+          const r1 = await fetch(
+            "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${EPHEMERAL_KEY}`,
+                "Content-Type": "application/sdp",
+              },
+              body: offer.sdp,
+            }
+          );
+
+          if (!r1.ok) {
+            const msg = await r1.text().catch(() => "");
+            alert("Realtime connection error:\n" + msg);
+            return;
+          }
+
+          const answer = { type: "answer", sdp: await r1.text() };
+          await pc.setRemoteDescription(answer);
+
+          console.log("✅ Realtime connected. You can speak now.");
+        }
+
+        // Click to start (required for autoplay policies)
+        document
+          .getElementById("start-realtime")
+          .addEventListener("click", startRealtime);
+      })();
+    </script>
+  </body>
+</html>
