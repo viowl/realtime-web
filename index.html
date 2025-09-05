@@ -8,31 +8,31 @@
 <body>
   <button id="start">Start</button>
 
-  <!-- UMD-обёртка (глобальный Vapi) -->
-  <script src="https://cdn.jsdelivr.net/gh/balacodeio/Vapi-Web-UMD@latest/dist/latest/vapi-web-bundle.min.js"></script>
+  <!-- ВАЖНО: официальный ESM SDK, а не UMD-обёртки -->
+  <script type="module">
+    import Vapi from 'https://esm.sh/@vapi-ai/web@2.3.10?bundle';
 
-  <script>
-  const PUBLIC_KEY  = '1d7d052d-78bb-4b90-955a-4c6fb40e2c40';
-  const WORKFLOW_ID = '80da1f87-ca79-40ef-b65e-0cf5d01d6edf';
+    const PUBLIC_KEY  = '1d7d052d-78bb-4b90-955a-4c6fb40e2c40';      // Public API Key из Dashboard
+    const WORKFLOW_ID = '80da1f87-ca79-40ef-b65e-0cf5d01d6edf';      // твой workflow
 
-  const vapi = new Vapi(PUBLIC_KEY);
-  vapi.on('error', console.log);
-  vapi.on('call-start', () => console.log('call-start'));
-  vapi.on('call-end',   () => console.log('call-end'));
+    const vapi = new Vapi(PUBLIC_KEY);
 
-  document.getElementById('start').onclick = async () => {
-    try {
-      await vapi.start(null, null, null, WORKFLOW_ID);
-    } catch (e1) {
-      console.log('4th-arg failed:', e1);
+    // по клику браузер даст доступ к микрофону
+    document.getElementById('start').onclick = async () => {
       try {
-        await vapi.start({ workflowId: WORKFLOW_ID });
-      } catch (e2) {
-        console.log('object form failed:', e2);
-        alert('Не удалось запустить Workflow. Смотри Console → ошибки.');
+        // Способ 1 (самый надёжный сейчас для workflow):
+        await vapi.start(null, null, null, WORKFLOW_ID);
+        // Способ 2 (если версия SDK уже поддерживает объект):
+        // await vapi.start({ workflowId: WORKFLOW_ID });
+      } catch (err) {
+        console.error('start failed', err);
+        alert('Не удалось запустить workflow. Смотри консоль.');
       }
-    }
-  };
-</script>
+    };
+
+    vapi.on('error', console.error);
+    vapi.on('call-start', () => console.log('call started'));
+    vapi.on('call-end',   () => console.log('call ended'));
+  </script>
 </body>
 </html>
