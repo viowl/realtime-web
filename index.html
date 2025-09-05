@@ -12,21 +12,27 @@
   <script src="https://cdn.jsdelivr.net/gh/balacodeio/Vapi-Web-UMD@latest/dist/latest/vapi-web-bundle.min.js"></script>
 
   <script>
-    const PUBLIC_KEY  = '1d7d052d-78bb-4b90-955a-4c6fb40e2c40';
-    const WORKFLOW_ID = '80da1f87-ca79-40ef-b65e-0cf5d01d6edf';
+  const PUBLIC_KEY  = '1d7d052d-78bb-4b90-955a-4c6fb40e2c40';
+  const WORKFLOW_ID = '80da1f87-ca79-40ef-b65e-0cf5d01d6edf';
 
-    // будет доступно как window.Vapi
-    const vapi = new Vapi(PUBLIC_KEY);
+  const vapi = new Vapi(PUBLIC_KEY);
+  vapi.on('error', console.log);
+  vapi.on('call-start', () => console.log('call-start'));
+  vapi.on('call-end',   () => console.log('call-end'));
 
-    document.getElementById('start').onclick = async () => {
+  document.getElementById('start').onclick = async () => {
+    try {
+      await vapi.start(null, null, null, WORKFLOW_ID);
+    } catch (e1) {
+      console.log('4th-arg failed:', e1);
       try {
-        // Способ #1: workflowId 4-м аргументом
-        await vapi.start(null, null, null, WORKFLOW_ID);
-      } catch (e1) {
-        // Способ #2: объектом (в некоторых версиях SDK)
         await vapi.start({ workflowId: WORKFLOW_ID });
+      } catch (e2) {
+        console.log('object form failed:', e2);
+        alert('Не удалось запустить Workflow. Смотри Console → ошибки.');
       }
-    };
-  </script>
+    }
+  };
+</script>
 </body>
 </html>
