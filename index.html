@@ -15,44 +15,38 @@
   <button id="start">Start</button>
   <div id="log"></div>
 
-  <script>
-    const PUBLIC_KEY  = 'd8554fe7-520e-4c5b-9320-06304c91d9ac';
+  <script type="module">
+    import Vapi from 'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.3.10/dist/vapi.js';
+    // альтернативно: 'https://unpkg.com/@vapi-ai/web@2.3.10/dist/vapi.js'
+
+    const PUBLIC_KEY  = 'efd442b8-2211-4591-9247-a524e6fb25ae';
     const WORKFLOW_ID = '80da1f87-ca79-40ef-b65e-0cf5d01d6edf';
     const log = (...a)=>{document.getElementById('log').textContent += a.join(' ')+'\n';};
 
-    // 1) грузим SDK динамически и ждём onload
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.3.10/dist/vapi.js';
-    s.onload = () => {
-      log('SDK loaded from:', s.src);
-      const VapiCtor = window.Vapi?.default || window.Vapi;
-      if (!VapiCtor) { log('Глобал Vapi не найден (CSP/расширение?)'); return; }
+    const vapi = new Vapi(PUBLIC_KEY);
+    vapi.on('error', e => log('error:', e?.message || e));
+    vapi.on('call-start', () => log('call-start'));
+    vapi.on('call-end',   () => log('call-end'));
 
-      const vapi = new VapiCtor(PUBLIC_KEY);
-      vapi.on('error', e => log('error:', e?.message || e));
-      vapi.on('call-start', () => log('call-start'));
-      vapi.on('call-end',   () => log('call-end'));
-
-      document.getElementById('start').onclick = async () => {
-        log('start()…');
+    document.getElementById('start').onclick = async () => {
+      log('start…');
+      try {
+        // workflowId — 4-м аргументом
+        await vapi.start(null, null, null, WORKFLOW_ID);
+        log('started (4th arg)');
+      } catch (e1) {
+        log('4th-arg failed:', e1?.message || e1);
         try {
-          // способ №1: workflowId 4-м аргументом
-          await vapi.start(null, null, null, WORKFLOW_ID);
-          log('start(): ok');
-        } catch (e1) {
-          log('start() 4-й арг.:', e1?.message || e1);
-          // способ №2: объектная форма (на некоторых версиях)
-          try {
-            await vapi.start({ workflowId: WORKFLOW_ID });
-            log('start(): ok (object form)');
-          } catch (e2) {
-            log('start() object form:', e2?.message || e2);
-          }
+          // на некоторых билдах доступна объектная форма
+          await vapi.start({ workflowId: WORKFLOW_ID });
+          log('started (object form)');
+        } catch (e2) {
+          log('object-form failed:', e2?.message || e2);
+          alert('Не удалось запустить Workflow — см. лог выше.');
         }
-      };
+      }
     };
-    s.onerror = () => log('SDK load error (проверь URL/доступ к CDN):', s.src);
-    document.head.appendChild(s);
   </script>
 </body>
 </html>
+
