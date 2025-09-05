@@ -1,119 +1,50 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Voice Assistant</title>
-  </head>
-  <body>
-    <h1>Voice Assistant</h1>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vapi Workflow Demo</title>
+  <style>body{font-family:system-ui;margin:24px}button{padding:10px 14px;font-size:16px}</style>
+</head>
+<body>
+  <h1>Запуск Workflow</h1>
+  <button id="start">Start</button>
+  <pre id="log" style="background:#111;color:#0f0;padding:10px;max-height:200px;overflow:auto"></pre>
 
-    <button id="start-realtime" style="padding: 12px 16px; font-size: 16px">
-      🎤 Talk to the assistant
-    </button>
+  <!-- UMD сборка SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.3.10/dist/vapi.js"></script>
+  <script>
+    const PUBLIC_KEY  = 'd8554fe7-520e-4c5b-9320-06304c91d9ac';
+    const WORKFLOW_ID = '80da1f87-ca79-40ef-b65e-0cf5d01d6edf';
+    const log = (...a)=>{document.getElementById('log').textContent += a.join(' ')+'\n';};
 
-    <script>
-      (async () => {
-        const SESSION_URL =
-          "https://n8n-test.space/webhook/728f5083-a6e5-4f7f-b671-c7dacb68f292"; // ваш n8n
+    // Совместимость экспорта UMD
+    const VapiCtor = window.Vapi?.default || window.Vapi;
+    if (!VapiCtor) { log('SDK не загрузился (проверьте URL скрипта)'); }
 
-        async function startRealtime() {
-          try {
-            console.clear();
-            console.log("🔎 1) Fetching session from:", SESSION_URL);
+    const vapi = new VapiCtor(PUBLIC_KEY);
+    vapi.on('error', e => log('error:', e?.message || e));
+    vapi.on('call-start', () => log('call-start'));
+    vapi.on('call-end',   () => log('call-end'));
 
-            // 1) Забираем эфемерный ключ у n8n
-            const r0 = await fetch(SESSION_URL, { method: "GET" });
-            console.log("   r0.status =", r0.status);
-
-            const raw = await r0.text();
-            console.log("   r0.raw =", raw);
-
-            let data;
-            try {
-              data = JSON.parse(raw);
-            } catch (e) {
-              console.error("❗ JSON parse error:", e);
-              alert("Backend returned non-JSON");
-              return;
-            }
-
-            // ожидаем { "client_secret": { "value": "ek_...", "expires_at": ... } }
-            const EPHEMERAL_KEY = data?.client_secret?.value;
-            console.log(
-              "   EPHEMERAL_KEY =",
-              EPHEMERAL_KEY ? EPHEMERAL_KEY.slice(0, 10) + "…" : EPHEMERAL_KEY
-            );
-            if (!EPHEMERAL_KEY) {
-              alert("Session key is empty");
-              return;
-            }
-
-            // 2) WebRTC
-            console.log("🎛 2) Preparing WebRTC");
-            const pc = new RTCPeerConnection();
-            const audioEl = document.createElement("audio");
-            audioEl.autoplay = true;
-            document.body.appendChild(audioEl);
-            pc.ontrack = (e) => (audioEl.srcObject = e.streams[0]);
-
-            let mic;
-            try {
-              mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-              console.log("🎤 mic granted");
-            } catch (e) {
-              console.error("🎤 mic error:", e);
-              alert("Please allow microphone access");
-              return;
-            }
-            mic.getTracks().forEach((t) => pc.addTrack(t, mic));
-
-            // 3) Отправляем SDP в OpenAI
-            console.log("🚀 3) Sending SDP offer to OpenAI…");
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-
-            let r1;
-            try {
-              r1 = await fetch(
-                "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview",
-                {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${EPHEMERAL_KEY}`,
-                    "Content-Type": "application/sdp",
-                  },
-                  body: offer.sdp,
-                }
-              );
-            } catch (e) {
-              console.error("❗ OpenAI fetch threw before network:", e);
-              alert("OpenAI fetch failed before request");
-              return;
-            }
-
-            console.log("   r1.status =", r1.status);
-            if (!r1.ok) {
-              const msg = await r1.text().catch(() => "");
-              console.error("   r1.body =", msg);
-              alert("Realtime connection error:\n" + msg);
-              return;
-            }
-
-            const answer = { type: "answer", sdp: await r1.text() };
-            await pc.setRemoteDescription(answer);
-
-            console.log("✅ 4) Realtime connected. You can speak now.");
-          } catch (e) {
-            console.error("💥 Uncaught in startRealtime:", e);
-            alert("Unexpected error: " + e);
-          }
+    document.getElementById('start').onclick = async () => {
+      log('start…');
+      try {
+        // Запуск ИМЕННО workflow — ID 4-м аргументом:
+        await vapi.start(null, null, null, WORKFLOW_ID);
+        log('started');
+      } catch (e1) {
+        log('start failed, try object form…', e1?.message || e1);
+        try {
+          // На некоторых билдах работает объектная форма:
+          await vapi.start({ workflowId: WORKFLOW_ID });
+          log('started (object form)');
+        } catch (e2) {
+          log('fallback failed:', e2?.message || e2);
+          alert('Не удалось запустить Workflow — см. лог.');
         }
-
-        document
-          .getElementById("start-realtime")
-          .addEventListener("click", startRealtime);
-      })();
-    </script>
-  </body>
+      }
+    };
+  </script>
+</body>
 </html>
